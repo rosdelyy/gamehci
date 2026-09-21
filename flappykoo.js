@@ -1,19 +1,26 @@
-//board
+// Board
 let board;
 let boardWidth = 360;
 let boardHeight = 640;
 let context;
 
-//jungkook
+// Jungkook
 let kooWidth = 40;
 let kooHeight = 60;
-let kooX = boardWidth/8;
-let kooY = boardHeight/2;
+let kooX = boardWidth / 6;
+let kooY = boardHeight / 2;
 let kooImg;
 
-//tubos
+let koo = {
+    x: kooX,
+    y: kooY,
+    width: kooWidth,
+    height: kooHeight
+}
+
+// Tubos
 let tuboArray = [];
-let tuboWidth = 64
+let tuboWidth = 64;
 let tuboHeight = 512;
 let tuboX = boardWidth;
 let tuboY = 0;
@@ -21,108 +28,181 @@ let tuboY = 0;
 let topTuboImg;
 let bottomTuboImg;
 
- //para mover 
- let velocityX = -2; // los tubitos para la izquierda
- let velocityY = 0; // jungkook velocidad
- let gravity = 0.50 // para mantener a jungkook cayendo
+// Velocidad 
+let velocityX = -2; // Velocidad con la que se mueven los tubos a la izquierda
+let velocityY = 0;  // Velocidad inicial del salto
+let gravity = 0.4;  // Gravedad constante
 
- let gameOver = false;
+// Para empezar y la puntuación
+let gameStarted = false;
+let gameOver = false;
+let score = 0;
 
-let koo = {
-    x : kooX,
-    y : kooY,
-    width : kooWidth,
-    height : kooHeight
-}
+// Soniditos
+let wingSound = new Audio("./sfx_wing.wav");
+let hitSound = new Audio("./sfx_hit.wav");
+let pointSound = new Audio("./sfx_point.wav");
+let dieSound = new Audio("./sfx_die.wav");
 
+// Imagen de las nubes y asi
 window.onload = function() {
     board = document.getElementById("board");
     board.height = boardHeight;
     board.width = boardWidth;
     context = board.getContext("2d");
 
-    //ponemos al jungkook
-    //context.fillRect(koo.x, koo.y, koo.width, koo.height) es el cuadro negro cuando no teniamos imagen
-
-    //cargar la imagen
+    // Cargar imagen de Jungkook
     kooImg = new Image();
     kooImg.src = "./jungkook.png";
     kooImg.onload = function() {
         context.drawImage(kooImg, koo.x, koo.y, koo.width, koo.height);
     }
+
+    // Cargar imágenes de los tubos
     topTuboImg = new Image();
     topTuboImg.src = "./toppipe.png";
+
     bottomTuboImg = new Image();
     bottomTuboImg.src = "./bottompipe.png";
+
     requestAnimationFrame(update);
-    setInterval(placeTubos, 2000); 
+    setInterval(placeTubos, 1500); // Genera tubos cada 1.5 segundos
+
+    // Eventos de teclado y clic
     document.addEventListener("keydown", moveBird);
+    document.addEventListener("mousedown", moveBird);
 }
-//para hacerlo un loop
- function update() {
+
+function update() {
     requestAnimationFrame(update);
-   if (gameOver) {
+    
+    if (gameOver) {
         return;
     }
+
+    // Pantalla de inicio antes de dar el primer salto
+    if (!gameStarted) {
+        context.clearRect(0, 0, board.width, board.height);
+        context.drawImage(kooImg, koo.x, koo.y, koo.width, koo.height);
+
+        context.fillStyle = "white";
+        context.font = "18px sans-serif";
+        context.fillText("Presiona la barra de ESPACIO", 40, 300);
+        return;
+    }
+
     context.clearRect(0, 0, board.width, board.height);
 
-    //para mantener a jungkook ahi
+    // Aplicar gravedad a Jungkook
     velocityY += gravity;
-    koo.y += velocityY;
-   koo.y = Math.max(koo.y + velocityY, 0) // para que no se pase de arriba
+    koo.y = Math.max(koo.y + velocityY, 0); // Evita que se salga por arriba
     context.drawImage(kooImg, koo.x, koo.y, koo.width, koo.height);
-    if (koo.y > board.y) {
+
+    // Si cae al suelo
+    if (koo.y + koo.height >= boardHeight) {
+        if (!gameOver) {
+            dieSound.play();
+        }
         gameOver = true;
     }
-    //para poner los tubos
-    for (let i = 0; i<tuboArray.length; i++) {
+
+    // Mover y dibujar los tubos
+    for (let i = 0; i < tuboArray.length; i++) {
         let tubo = tuboArray[i];
         tubo.x += velocityX;
         context.drawImage(tubo.img, tubo.x, tubo.y, tubo.width, tubo.height);
 
+        // Sumar puntos al pasar el tubo
+        if (!tubo.passed && koo.x > tubo.x + tubo.width) {
+            score += 0.5; // Suma 0.5 por cada tubo (un par suma 1 punto)
+            tubo.passed = true;
+
+            if (score % 1 === 0) {
+                pointSound.play();
+            }
+        }
+
+        // Detectar choque con los tubos
         if (detectChoque(koo, tubo)) {
+            if (!gameOver) {
+                hitSound.play();
+            }
             gameOver = true;
         }
     }
 
- }
+    // Limpiar tubos fuera de pantalla
+    while (tuboArray.length > 0 && tuboArray[0].x < -tuboWidth) {
+        tuboArray.shift();
+    }
 
- function placeTubos() {
+    // Dibujar la puntuación
+    context.fillStyle = "white";
+    context.font = "45px sans-serif";
+    context.fillText(Math.floor(score), 10, 45);
+
+    // Mensaje de Game Over
     if (gameOver) {
+        context.fillText("GAME OVER", 40, 300);
+    }
+}
+
+function placeTubos() {
+    if (gameOver || !gameStarted) {
         return;
     }
-    let randomTuboY = tuboY - tuboHeight/4 - Math.random()*(tuboHeight/2);
-    let espacio = boardHeight / 4; 
+
+    let randomTuboY = tuboY - tuboHeight / 4 - Math.random() * (tuboHeight / 2);
+    let espacio = boardHeight / 4; // Espacio libre entre tubos
 
     let topTubo = {
         img: topTuboImg,
-        x : tuboX,
-        y : randomTuboY,
-        width : tuboWidth,
-        height : tuboHeight,
-        passed : false
+        x: tuboX,
+        y: randomTuboY,
+        width: tuboWidth,
+        height: tuboHeight,
+        passed: false
     }
     tuboArray.push(topTubo);
+
     let bottomTubo = {
-        img : bottomTuboImg,
-        x : tuboX,
-        y : randomTuboY + tuboHeight + espacio,
-        width : tuboWidth,
-        height : tuboHeight,
-        passed : false
+        img: bottomTuboImg,
+        x: tuboX,
+        y: randomTuboY + tuboHeight + espacio,
+        width: tuboWidth,
+        height: tuboHeight,
+        passed: false
     }
     tuboArray.push(bottomTubo);
- }
- function moveBird(e) {
-    if (e.code == "Space" || e.code == "ArrowUp" || e.code == "KeyX") {
-        //para saltar
+}
+
+function moveBird(e) {
+    if (e.type === "mousedown" || e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyX") {
+        
+        // Iniciar el juego en la primera interacción
+        if (!gameStarted) {
+            gameStarted = true;
+        }
+
+        // Reiniciar el juego si perdiste
+        if (gameOver) {
+            koo.y = kooY;
+            tuboArray = [];
+            score = 0;
+            gameOver = false;
+            gameStarted = true;
+        }
+
+        // Impulso de salto
         velocityY = -6;
+        wingSound.currentTime = 0;
+        wingSound.play();
     }
-    
- }
- function detectChoque(a, b) {
+}
+
+function detectChoque(a, b) {
     return a.x < b.x + b.width &&
-            a.x + a.width > b.x &&
-            a.y < b.y + b.height &&
-            a.y + a.height > b.y;
- }
+           a.x + a.width > b.x &&
+           a.y < b.y + b.height &&
+           a.y + a.height > b.y;
+}
