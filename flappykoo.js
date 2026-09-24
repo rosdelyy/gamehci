@@ -44,7 +44,9 @@ let hitSound = new Audio("./sfx_hit.wav");
 let pointSound = new Audio("./sfx_point.wav");
 let dieSound = new Audio("./sfx_die.wav");
 
-// Imagen de las nubes y asi
+// Control de gesto
+let manoEstabaAbierta = false;
+
 window.onload = function() {
     board = document.getElementById("board");
     board.height = boardHeight;
@@ -66,11 +68,13 @@ window.onload = function() {
     bottomTuboImg.src = "./bottompipe.png";
 
     requestAnimationFrame(update);
-    setInterval(placeTubos, 1500); // Genera tubos cada 1.5 segundos
-
+    setInterval(placeTubos, 2200); // Genera tubos cada 2.2 segundos (más separados)
     // Eventos de teclado y clic
     document.addEventListener("keydown", moveBird);
     document.addEventListener("mousedown", moveBird);
+
+    // Inicializar Detección Gestual con la cámara
+    iniciarCamaraYGestos();
 }
 
 function update() {
@@ -86,8 +90,8 @@ function update() {
         context.drawImage(kooImg, koo.x, koo.y, koo.width, koo.height);
 
         context.fillStyle = "white";
-        context.font = "18px sans-serif";
-        context.fillText("Presiona la barra de ESPACIO", 40, 300);
+        context.font = "16px sans-serif";
+        context.fillText("Abre la mano o presiona ESPACIO", 20, 300);
         return;
     }
 
@@ -177,7 +181,8 @@ function placeTubos() {
 }
 
 function moveBird(e) {
-    if (e.type === "mousedown" || e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyX") {
+    // Si la llamada viene por un evento o por el gesto (e.isGesture)
+    if (e.isGesture || e.type === "mousedown" || e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyX") {
         
         // Iniciar el juego en la primera interacción
         if (!gameStarted) {
@@ -205,4 +210,55 @@ function detectChoque(a, b) {
            a.x + a.width > b.x &&
            a.y < b.y + b.height &&
            a.y + a.height > b.y;
+}
+
+// --- CONFIGURACIÓN DE MEDIAPIPE Y GESTOS ---
+function iniciarCamaraYGestos() {
+    const videoElement = document.getElementById('webcam');
+
+    const hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+    });
+
+    hands.onResults((results) => {
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            const puntos = results.multiHandLandmarks[0];
+
+            // Punto 0: Muñeca / Punto 8: Punta del dedo índice
+            const muneca = puntos[0];
+            const indice = puntos[8];
+
+            // Distancia Euclidiana en 2D
+            const distancia = Math.hypot(indice.x - muneca.x, indice.y - muneca.y);
+
+            const UMBRAL = 0.35; // Ajustar sensibilidad si la mano es pequeña o está lejos
+
+            if (distancia > UMBRAL) {
+                if (!manoEstabaAbierta) {
+                    // Disparamos el salto simulando la llamada
+                    moveBird({ isGesture: true });
+                    manoEstabaAbierta = true;
+                }
+            } else {
+                manoEstabaAbierta = false;
+            }
+        }
+    });
+
+    const camera = new Camera(videoElement, {
+        onFrame: async () => {
+            await hands.send({ image: videoElement });
+        },
+        width: 640,
+        height: 480
+    });
+
+    camera.start();
 }
